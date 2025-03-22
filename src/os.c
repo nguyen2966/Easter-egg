@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include<ctype.h>
 
 static int time_slot;
 static int num_cpus;
@@ -140,59 +141,396 @@ static void * ld_routine(void * args) {
 	pthread_exit(NULL);
 }
 
-static void read_config(const char * path) {
-	FILE * file;
-	if ((file = fopen(path, "r")) == NULL) {
-		printf("Cannot find configure file at %s\n", path);
-		exit(1);
-	}
-	fscanf(file, "%d %d %d\n", &time_slot, &num_cpus, &num_processes);
-	ld_processes.path = (char**)malloc(sizeof(char*) * num_processes);
-	ld_processes.start_time = (unsigned long*)
-		malloc(sizeof(unsigned long) * num_processes);
+// static void read_config(const char * path) {
+// 	FILE * file;
+// 	if ((file = fopen(path, "r")) == NULL) {
+// 		printf("Cannot find configure file at %s\n", path);
+// 		exit(1);
+// 	}
+// 	fscanf(file, "%d %d %d\n", &time_slot, &num_cpus, &num_processes);
+// 	ld_processes.path = (char**)malloc(sizeof(char*) * num_processes);
+// 	ld_processes.start_time = (unsigned long*)
+// 		malloc(sizeof(unsigned long) * num_processes);
+// #ifdef MM_PAGING
+// 	int sit;
+// #ifdef MM_FIXED_MEMSZ
+// 	/* We provide here a back compatible with legacy OS simulatiom config file
+//          * In which, it have no addition config line for Mema, keep only one line
+// 	 * for legacy info 
+//          *  [time slice] [N = Number of CPU] [M = Number of Processes to be run]
+//          */
+//         memramsz    =  0x100000;
+//         memswpsz[0] = 0x1000000;
+// 	for(sit = 1; sit < PAGING_MAX_MMSWP; sit++)
+// 		memswpsz[sit] = 0;
+// #else
+// 	/* Read input config of memory size: MEMRAM and upto 4 MEMSWP (mem swap)
+// 	 * Format: (size=0 result non-used memswap, must have RAM and at least 1 SWAP)
+// 	 *        MEM_RAM_SZ MEM_SWP0_SZ MEM_SWP1_SZ MEM_SWP2_SZ MEM_SWP3_SZ
+// 	*/
+// 	fscanf(file, "%d\n", &memramsz);
+// 	for(sit = 0; sit < PAGING_MAX_MMSWP; sit++)
+// 		fscanf(file, "%d", &(memswpsz[sit])); 
+
+//        fscanf(file, "\n"); /* Final character */
+// #endif
+// #endif
+
+// #ifdef MLQ_SCHED
+// 	ld_processes.prio = (unsigned long*)
+// 		malloc(sizeof(unsigned long) * num_processes);
+// #endif
+// 	int i;
+// 	for (i = 0; i < num_processes; i++) {
+// 		ld_processes.path[i] = (char*)malloc(sizeof(char) * 100);
+// 		ld_processes.path[i][0] = '\0';
+// 		strcat(ld_processes.path[i], "input/proc/");
+// 		char proc[100];
+// #ifdef MLQ_SCHED
+// 		int ret = fscanf(file, "%lu %s %lu\n", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
+// 		printf("[DEBUG] fscanf returned %d | proc = [%s]\n", ret, proc);
+// #else
+// 		fscanf(file, "%lu %s\n", &ld_processes.start_time[i], proc);
+// #endif
+// 		strcat(ld_processes.path[i], proc);
+// 		printf("[CONFIG] i = %d | start_time = %lu | path = %s | prio = %lu\n",
+// 			i, ld_processes.start_time[i], ld_processes.path[i], ld_processes.prio[i]);
+// 	}
+
+// }
+
+
+// static void read_config(const char * path) {
+//     FILE * file;
+//     if ((file = fopen(path, "r")) == NULL) {
+//         printf("Cannot find configure file at %s\n", path);
+//         exit(1);
+//     }
+    
+//     // Read the first line for system parameters
+//     char buffer[256];
+//     if (fgets(buffer, sizeof(buffer), file) == NULL) {
+//         printf("Error reading system parameters\n");
+//         fclose(file);
+//         exit(1);
+//     }
+    
+//     if (sscanf(buffer, "%d %d %d", &time_slot, &num_cpus, &num_processes) != 3) {
+//         printf("Invalid format for system parameters\n");
+//         fclose(file);
+//         exit(1);
+//     }
+    
+//     printf("[DEBUG] Read time_slot = %d | num_cpus = %d | num_processes = %d\n",
+//         time_slot, num_cpus, num_processes);
+    
+//     // Allocate memory for process information
+//     ld_processes.path = (char**)malloc(sizeof(char*) * num_processes);
+//     ld_processes.start_time = (unsigned long*) malloc(sizeof(unsigned long) * num_processes);
+    
+// #ifdef MM_PAGING
+//     int sit;
+// #ifdef MM_FIXED_MEMSZ
+//     memramsz    =  0x100000;
+//     memswpsz[0] = 0x1000000;
+//     for(sit = 1; sit < PAGING_MAX_MMSWP; sit++)
+//         memswpsz[sit] = 0;
+// #else
+//     fscanf(file, "%d", &memramsz);
+//     for(sit = 0; sit < PAGING_MAX_MMSWP; sit++)
+//         fscanf(file, "%d", &(memswpsz[sit])); 
+    
+//     // Consume the newline after memory parameters
+//     fgetc(file);
+// #endif
+// #endif
+
+// #ifdef MLQ_SCHED
+//     ld_processes.prio = (unsigned long*) malloc(sizeof(unsigned long) * num_processes);
+// #endif
+    
+//     // Read process information
+//     int i;
+//     for (i = 0; i < num_processes; i++) {
+//         char line[256] = {0};
+//         if (fgets(line, sizeof(line), file) == NULL) {
+//             printf("Error reading process %d configuration\n", i);
+//             break;
+//         }
+//         printf("[DEBUG LINE] %s", line);
+        
+//         char proc[100] = {0};
+//         ld_processes.path[i] = (char*)malloc(sizeof(char) * 100);
+//         ld_processes.path[i][0] = '\0';
+//         strcat(ld_processes.path[i], "input/proc/");
+        
+// #ifdef MLQ_SCHED
+//         int ret;
+//         // Try both formats - either "start_time proc prio" or "start_time prio"
+//         ret = sscanf(line, "%lu %s %lu", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
+//         if (ret != 3) {
+//             // Try alternative format where second field is prio
+//             ret = sscanf(line, "%lu %lu", &ld_processes.start_time[i], &ld_processes.prio[i]);
+//             if (ret == 2) {
+//                 // If this worked, set proc to "s" + start_time as a default name
+//                 sprintf(proc, "s%lu", ld_processes.start_time[i]);
+//                 printf("Using generated proc name: %s\n", proc);
+//                 ret = 3; // Mark as successfully read
+//             } else {
+//                 printf("Error: Invalid format for process %d. Couldn't parse.\n", i);
+//                 ld_processes.start_time[i] = 0;
+//                 strcpy(proc, "");
+//                 ld_processes.prio[i] = 0;
+//             }
+//         }
+//         printf("[DEBUG] sscanf returned %d | proc = [%s] | start_time = %lu | prio = %lu\n", 
+//                ret, proc, ld_processes.start_time[i], ld_processes.prio[i]);
+// #else
+//         int ret;
+//         // Try both formats - either "start_time proc" or just "start_time"
+//         ret = sscanf(line, "%lu %s", &ld_processes.start_time[i], proc);
+//         if (ret != 2) {
+//             // Try reading just the start time
+//             ret = sscanf(line, "%lu", &ld_processes.start_time[i]);
+//             if (ret == 1) {
+//                 // If this worked, set proc to "s" + start_time as a default name
+//                 sprintf(proc, "s%lu", ld_processes.start_time[i]);
+//                 printf("Using generated proc name: %s\n", proc);
+//                 ret = 2; // Mark as successfully read
+//             } else {
+//                 printf("Error: Invalid format for process %d. Couldn't parse.\n", i);
+//                 ld_processes.start_time[i] = 0;
+//                 strcpy(proc, "");
+//             }
+//         }
+//         printf("[DEBUG] sscanf returned %d | proc = [%s] | start_time = %lu\n", 
+//                ret, proc, ld_processes.start_time[i]);
+// #endif
+        
+//         strcat(ld_processes.path[i], proc);
+//         printf("[CONFIG] i = %d | path = %s\n", i, ld_processes.path[i]);
+//     }
+    
+//     fclose(file);
+// }
+
+// static void read_config(const char * path) {
+//     FILE * file;
+//     if ((file = fopen(path, "r")) == NULL) {
+//         printf("Cannot find configure file at %s\n", path);
+//         exit(1);
+//     }
+
+//     // Read the first line for system parameters
+//     char buffer[256];
+//     if (fgets(buffer, sizeof(buffer), file) == NULL) {
+//         printf("Error reading system parameters\n");
+//         fclose(file);
+//         exit(1);
+//     }
+
+//     if (sscanf(buffer, "%d %d %d", &time_slot, &num_cpus, &num_processes) != 3) {
+//         printf("Invalid format for system parameters\n");
+//         fclose(file);
+//         exit(1);
+//     }
+
+//     printf("[DEBUG] Read time_slot = %d | num_cpus = %d | num_processes = %d\n",
+//         time_slot, num_cpus, num_processes);
+
+//     // Allocate memory for process information
+//     ld_processes.path = (char**)malloc(sizeof(char*) * num_processes);
+//     ld_processes.start_time = (unsigned long*) malloc(sizeof(unsigned long) * num_processes);
+
+// #ifdef MM_PAGING
+//     int sit;
+// #ifdef MM_FIXED_MEMSZ
+//     memramsz    =  0x100000;
+//     memswpsz[0] = 0x1000000;
+//     for(sit = 1; sit < PAGING_MAX_MMSWP; sit++)
+//         memswpsz[sit] = 0;
+// #else
+//     // Check next line to see if it's memsz or a process
+//     if (fgets(buffer, sizeof(buffer), file) == NULL) {
+//         printf("Unexpected EOF after system parameters\n");
+//         fclose(file);
+//         exit(1);
+//     }
+//     int has_alpha = 0;
+//     for (int i = 0; buffer[i] != '\0'; i++) {
+//         if (isalpha(buffer[i])) {
+//             has_alpha = 1;
+//             break;
+//         }
+//     }
+//     if (!has_alpha) {
+//         // It's a memory config
+//         fscanf(file, "%d", &memramsz);
+//         for(sit = 0; sit < PAGING_MAX_MMSWP; sit++)
+//             fscanf(file, "%d", &(memswpsz[sit]));
+//         fgetc(file);
+//     } else {
+//         // It's a process config - rewind
+//        // fseek(file, -strlen(buffer), SEEK_CUR);
+// 	   fseek(file, -(long)(strlen(buffer) + 1), SEEK_CUR);
+//     }
+// #endif
+// #endif
+
+// #ifdef MLQ_SCHED
+//     ld_processes.prio = (unsigned long*) malloc(sizeof(unsigned long) * num_processes);
+// #endif
+
+//     // Read process information
+//     int i;
+//     for (i = 0; i < num_processes; i++) {
+//         char line[256] = {0};
+//         if (fgets(line, sizeof(line), file) == NULL) {
+//             printf("Error reading process %d configuration\n", i);
+//             break;
+//         }
+//         printf("[DEBUG LINE] %s", line);
+
+//         char proc[100] = {0};
+//         ld_processes.path[i] = (char*)malloc(sizeof(char) * 100);
+//         ld_processes.path[i][0] = '\0';
+//         strcat(ld_processes.path[i], "input/proc/");
+
+// #ifdef MLQ_SCHED
+//         int ret;
+//         ret = sscanf(line, "%lu %s %lu", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
+//         if (ret != 3) {
+//             ret = sscanf(line, "%lu %lu", &ld_processes.start_time[i], &ld_processes.prio[i]);
+//             if (ret == 2) {
+//                 sprintf(proc, "s%lu", ld_processes.start_time[i]);
+//                 printf("Using generated proc name: %s\n", proc);
+//                 ret = 3;
+//             } else {
+//                 printf("Error: Invalid format for process %d. Couldn't parse.\n", i);
+//                 ld_processes.start_time[i] = 0;
+//                 strcpy(proc, "");
+//                 ld_processes.prio[i] = 0;
+//             }
+//         }
+//         printf("[DEBUG] sscanf returned %d | proc = [%s] | start_time = %lu | prio = %lu\n", 
+//                ret, proc, ld_processes.start_time[i], ld_processes.prio[i]);
+// #else
+//         int ret;
+//         ret = sscanf(line, "%lu %s", &ld_processes.start_time[i], proc);
+//         if (ret != 2) {
+//             ret = sscanf(line, "%lu", &ld_processes.start_time[i]);
+//             if (ret == 1) {
+//                 sprintf(proc, "s%lu", ld_processes.start_time[i]);
+//                 printf("Using generated proc name: %s\n", proc);
+//                 ret = 2;
+//             } else {
+//                 printf("Error: Invalid format for process %d. Couldn't parse.\n", i);
+//                 ld_processes.start_time[i] = 0;
+//                 strcpy(proc, "");
+//             }
+//         }
+//         printf("[DEBUG] sscanf returned %d | proc = [%s] | start_time = %lu\n", 
+//                ret, proc, ld_processes.start_time[i]);
+// #endif
+
+//         strcat(ld_processes.path[i], proc);
+//         printf("[CONFIG] i = %d | path = %s\n", i, ld_processes.path[i]);
+//     }
+
+//     fclose(file);
+// }
+
+static void read_config(const char *path) {
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        printf("Cannot find configure file at %s\n", path);
+        exit(1);
+    }
+
+    char buffer[256];
+
+    // Đọc dòng đầu tiên: time_slot, num_cpus, num_processes
+    if (!fgets(buffer, sizeof(buffer), file) ||
+        sscanf(buffer, "%d %d %d", &time_slot, &num_cpus, &num_processes) != 3) {
+        printf("Invalid format for system parameters\n");
+        fclose(file);
+        exit(1);
+    }
+    printf("[DEBUG] Read time_slot = %d | num_cpus = %d | num_processes = %d\n", time_slot, num_cpus, num_processes);
+
+    // Cấp phát bộ nhớ cho process
+    ld_processes.path = malloc(sizeof(char*) * num_processes);
+    ld_processes.start_time = malloc(sizeof(unsigned long) * num_processes);
+
 #ifdef MM_PAGING
-	int sit;
-#ifdef MM_FIXED_MEMSZ
-	/* We provide here a back compatible with legacy OS simulatiom config file
-         * In which, it have no addition config line for Mema, keep only one line
-	 * for legacy info 
-         *  [time slice] [N = Number of CPU] [M = Number of Processes to be run]
-         */
-        memramsz    =  0x100000;
-        memswpsz[0] = 0x1000000;
-	for(sit = 1; sit < PAGING_MAX_MMSWP; sit++)
-		memswpsz[sit] = 0;
-#else
-	/* Read input config of memory size: MEMRAM and upto 4 MEMSWP (mem swap)
-	 * Format: (size=0 result non-used memswap, must have RAM and at least 1 SWAP)
-	 *        MEM_RAM_SZ MEM_SWP0_SZ MEM_SWP1_SZ MEM_SWP2_SZ MEM_SWP3_SZ
-	*/
-	fscanf(file, "%d\n", &memramsz);
-	for(sit = 0; sit < PAGING_MAX_MMSWP; sit++)
-		fscanf(file, "%d", &(memswpsz[sit])); 
+    // Kiểm tra dòng tiếp theo có phải cấu hình bộ nhớ hay không
+    long pos = ftell(file);
+    if (fgets(buffer, sizeof(buffer), file)) {
+        int is_mem_config = 1;
+        for (int i = 0; buffer[i]; i++) {
+            if (isalpha(buffer[i])) {
+                is_mem_config = 0;
+                break;
+            }
+        }
+        fseek(file, pos, SEEK_SET); // quay lại vị trí cũ
 
-       fscanf(file, "\n"); /* Final character */
-#endif
+        if (is_mem_config) {
+            fscanf(file, "%d", &memramsz);
+            for (int i = 0; i < PAGING_MAX_MMSWP; i++) {
+                fscanf(file, "%d", &memswpsz[i]);
+            }
+            fgetc(file); // đọc ký tự newline
+        }
+    } else {
+        printf("Unexpected EOF when checking memory config\n");
+        fclose(file);
+        exit(1);
+    }
 #endif
 
 #ifdef MLQ_SCHED
-	ld_processes.prio = (unsigned long*)
-		malloc(sizeof(unsigned long) * num_processes);
+    ld_processes.prio = malloc(sizeof(unsigned long) * num_processes);
 #endif
-	int i;
-	for (i = 0; i < num_processes; i++) {
-		ld_processes.path[i] = (char*)malloc(sizeof(char) * 100);
-		ld_processes.path[i][0] = '\0';
-		strcat(ld_processes.path[i], "input/proc/");
-		char proc[100];
+
+    // Đọc cấu hình các process
+    for (int i = 0; i < num_processes; i++) {
+        if (!fgets(buffer, sizeof(buffer), file)) {
+            printf("Error reading process %d configuration\n", i);
+            fclose(file);
+            exit(1);
+        }
+        printf("[DEBUG LINE] %s", buffer);
+
+        char proc[100] = {0};
+        ld_processes.path[i] = malloc(100);
+        strcpy(ld_processes.path[i], "input/proc/");
+
 #ifdef MLQ_SCHED
-		fscanf(file, "%lu %s %lu\n", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
+        int ret = sscanf(buffer, "%lu %s %lu", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
+        if (ret != 3) {
+            printf("Error parsing process %d line\n", i);
+            continue;
+        }
+        printf("[DEBUG] sscanf returned %d | proc = [%s] | start_time = %lu | prio = %lu\n",
+               ret, proc, ld_processes.start_time[i], ld_processes.prio[i]);
 #else
-		fscanf(file, "%lu %s\n", &ld_processes.start_time[i], proc);
+        int ret = sscanf(buffer, "%lu %s", &ld_processes.start_time[i], proc);
+        if (ret != 2) {
+            printf("Error parsing process %d line\n", i);
+            continue;
+        }
+        printf("[DEBUG] sscanf returned %d | proc = [%s] | start_time = %lu\n",
+               ret, proc, ld_processes.start_time[i]);
 #endif
-		strcat(ld_processes.path[i], proc);
-	}
+        strcat(ld_processes.path[i], proc);
+        printf("[CONFIG] i = %d | path = %s\n", i, ld_processes.path[i]);
+    }
+
+    fclose(file);
 }
+
+
 
 int main(int argc, char * argv[]) {
 	/* Read config */

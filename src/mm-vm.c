@@ -54,14 +54,16 @@ struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
 {
   struct vm_rg_struct * newrg;
   /* TODO retrive current vma to obtain newrg, current comment out due to compiler redundant warning*/
-  //struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
+  struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
+
+  if(!cur_vma) return NULL;
 
   newrg = malloc(sizeof(struct vm_rg_struct));
 
-  /* TODO: update the newrg boundary
-  // newrg->rg_start = ...
-  // newrg->rg_end = ...
-  */
+  // TODO: update the newrg boundary
+   newrg->rg_start = cur_vma->vm_end;
+   newrg->rg_end = cur_vma->vm_end + alignedsz;
+   newrg->rg_next = NULL;
 
   return newrg;
 }
@@ -75,9 +77,25 @@ struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
  */
 int validate_overlap_vm_area(struct pcb_t *caller, int vmaid, int vmastart, int vmaend)
 {
-  //struct vm_area_struct *vma = caller->mm->mmap;
+    struct vm_area_struct *vma = caller->mm->mmap;
 
   /* TODO validate the planned memory area is not overlapped */
+  while (vma != NULL) {
+    // Skip the vma that we're trying to extend
+    if (vma->vm_id != vmaid) {
+      // Check if there's overlap
+      // Overlap occurs when:
+      // 1. vmastart is inside another vma's range, or
+      // 2. vmaend is inside another vma's range, or
+      // 3. vmastart < vma_start AND vmaend > vma_end (new area encompasses existing vma)
+      if ((vmastart >= vma->vm_start && vmastart < vma->vm_end) ||
+          (vmaend > vma->vm_start && vmaend <= vma->vm_end) ||
+          (vmastart <= vma->vm_start && vmaend >= vma->vm_end)) {
+        return -1; // Overlap detected
+      }
+    }
+    vma = vma->vm_next;
+  }
 
   return 0;
 }
@@ -103,8 +121,8 @@ int inc_vma_limit(struct pcb_t *caller, int vmaid, int inc_sz)
     return -1; /*Overlap and failed allocation */
 
   /* TODO: Obtain the new vm area based on vmaid */
-  //cur_vma->vm_end... 
-  // inc_limit_ret...
+  cur_vma->vm_end = area->rg_end;
+  //inc_limit_ret
 
   if (vm_map_ram(caller, area->rg_start, area->rg_end, 
                     old_end, incnumpage , newrg) < 0)

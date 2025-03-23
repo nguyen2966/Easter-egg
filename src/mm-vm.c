@@ -61,8 +61,9 @@ struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
   newrg = malloc(sizeof(struct vm_rg_struct));
 
   // TODO: update the newrg boundary
-   newrg->rg_start = cur_vma->vm_end;
-   newrg->rg_end = cur_vma->vm_end + alignedsz;
+   newrg->rg_start = cur_vma->sbrk;
+   newrg->rg_end = cur_vma->sbrk + alignedsz;
+   //cur_vma->sbrk = newrg->rg_end;
    newrg->rg_next = NULL;
 
   return newrg;
@@ -77,26 +78,30 @@ struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
  */
 int validate_overlap_vm_area(struct pcb_t *caller, int vmaid, int vmastart, int vmaend)
 {
-    struct vm_area_struct *vma = caller->mm->mmap;
+  //  struct vm_area_struct *vma = caller->mm->mmap;
 
   /* TODO validate the planned memory area is not overlapped */
-  while (vma != NULL) {
-    // Skip the vma that we're trying to extend
-    if (vma->vm_id != vmaid) {
-      // Check if there's overlap
-      // Overlap occurs when:
-      // 1. vmastart is inside another vma's range, or
-      // 2. vmaend is inside another vma's range, or
-      // 3. vmastart < vma_start AND vmaend > vma_end (new area encompasses existing vma)
-      if ((vmastart >= vma->vm_start && vmastart < vma->vm_end) ||
-          (vmaend > vma->vm_start && vmaend <= vma->vm_end) ||
-          (vmastart <= vma->vm_start && vmaend >= vma->vm_end)) {
-        return -1; // Overlap detected
+    
+  struct vm_area_struct *vma = get_vma_by_num(caller->mm, vmaid);
+  if (!vma) return -1;
+
+  struct vm_rg_struct *curr = vma->vm_freerg_list;
+
+  while (curr != NULL) {
+      /*
+       * Trường hợp A [vmastart, vmaend)
+       * Trường hợp B [curr->rg_start, curr->rg_end)
+       * Chúng giao nhau nếu:
+       * NOT (A_end <= B_start || A_start >= B_end)
+       */
+      if (!(vmaend <= curr->rg_start || vmastart >= curr->rg_end)) {
+          // Có overlap với vùng free
+          return -1;
       }
-    }
-    vma = vma->vm_next;
+      curr = curr->rg_next;
   }
 
+  // Không overlap
   return 0;
 }
 
@@ -121,12 +126,18 @@ int inc_vma_limit(struct pcb_t *caller, int vmaid, int inc_sz)
     return -1; /*Overlap and failed allocation */
 
   /* TODO: Obtain the new vm area based on vmaid */
-  cur_vma->vm_end = area->rg_end;
-  //inc_limit_ret
+  
+  
+ // int inc_limit_ret 
 
   if (vm_map_ram(caller, area->rg_start, area->rg_end, 
                     old_end, incnumpage , newrg) < 0)
     return -1; /* Map the memory to MEMRAM */
+  
+  if(old_end < cur_vma->sbrk + inc_amt){
+      cur_vma->vm_end = area->rg_end;
+      cur_vma->sbrk += inc_amt;
+  }
 
   return 0;
 }

@@ -87,24 +87,48 @@ int vmap_page_range(struct pcb_t *caller,           // process call
                     struct vm_rg_struct *ret_rg)    // return mapped region, the real mapped fp
 {                                                   // no guarantee all given pages are mapped
   //struct framephy_struct *fpit;
-  int pgit = 0;
-  int pgn = PAGING_PGN(addr);
-
+  int pgit = 0;//Page Iterator
+  int pgn = PAGING_PGN(addr);  // Lấy số trang từ địa chỉ bắt đầu.
+  if(pgnum <= 0) {
+    return -1;
+  }
   /* TODO: update the rg_end and rg_start of ret_rg 
   //ret_rg->rg_end =  ....
   //ret_rg->rg_start = ...
   //ret_rg->vmaid = ...
   */
+  struct framephy_struct *fp = malloc(sizeof(struct framephy_struct)); // Cấp phát bộ nhớ cho khung vật lý. Để quản lý ds lk frames
+  int fpn;
+
+  //Khởt tạo giá trị của vùng bộ nhớ ảo đã ánh xạ 
+  ret_rg->rg_start = ret_rg->rg_end = addr; // Địa chỉ bắt đầu và kết thúc của vùng bộ nhớ ảo.
+  
+  fp->fp_next = frames; // Liên kết danh sách khung vật lý đã được ánh xạ.
 
   /* TODO map range of frame to address space
    *      [addr to addr + pgnum*PAGING_PAGESZ
    *      in page table caller->mm->pgd[]
    */
 
+
   /* Tracking for later page replacement activities (if needed)
    * Enqueue new usage page */
-  enlist_pgn_node(&caller->mm->fifo_pgn, pgn + pgit);
+  while (fp->fp_next)
+    {
+      fp = fp->fp_next; // Di chuyển đến khung bộ nhớ tiếp theo.
+      fpn = fp->fpn; // Lấy số khung bộ nhớ vật lý.
 
+      caller->mm->pgd[pgn + pgit] = 0; // Đặt giá trị mặc định cho mục trang trong bảng trang.
+      pte_set_fpn(&caller->mm->pgd[pgn + pgit], fpn); // Thiết lập FPN cho mục trang.
+      enlist_pgn_node(&caller->mm->fifo_pgn, pgn + pgit); // Thêm trang vào danh sách theo dõi của tiến trình.
+
+      if(pgit == pgnum - 1) // Nếu đã ánh xạ đủ số trang yêu cầu
+      {
+        ret_rg->rg_end = addr + (pgnum * PAGING_PAGESZ); // Cập nhật địa chỉ kết thúc của vùng bộ nhớ ảo.
+        break; // Thoát khỏi vòng lặp.
+      }
+      pgit++; // Tăng chỉ số trang.
+    }
   return 0;
 }
 
@@ -118,7 +142,8 @@ int vmap_page_range(struct pcb_t *caller,           // process call
 int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struct **frm_lst)
 {
   int pgit, fpn;
-  struct framephy_struct *newfp_str = NULL;
+  struct framephy_struct *newfp_str = malloc(sizeof(struct framephy_struct)); // Cấp phát bộ nhớ cho khung vật lý mới.
+   struct framephy_struct *fp = newfp_str; // Khởi tạo con trỏ khung vật lý.
 
   /* TODO: allocate the page 
   //caller-> ...
@@ -131,10 +156,19 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
    */
     if (MEMPHY_get_freefp(caller->mram, &fpn) == 0)
     {
-      newfp_str->fpn = fpn;
+      fp->fp_next = malloc(sizeof(struct framephy_struct)); // Cấp phát bộ nhớ cho khung vật lý tiếp theo.
+      fp = fp->fp_next; // Di chuyển đến khung bộ nhớ tiếp theo.
+      fp->fpn = fpn; // Gán số khung bộ nhớ vật lý vào khung bộ nhớ.
     }
     else
-    { // TODO: ERROR CODE of obtaining somes but not enough frames
+    { 
+      // TODO: ERROR CODE of obtaining somes but not enough frames
+      while(fp->fp_next){
+        MEMPHY_put_freefp(caller->mram, newfp_str->fp_next->fpn); // Trả lại khung bộ nhớ vật lý đã cấp phát.
+        newfp_str = newfp_str->fp_next; // Di chuyển đến khung bộ nhớ tiếp theo.
+      }
+      free(newfp_str); // Giải phóng bộ nhớ đã cấp phát cho khung vật lý.
+      return -1; // Trả về lỗi nếu không có đủ khung bộ nhớ.
     }
   }
 
@@ -215,9 +249,15 @@ int __swap_cp_page(struct memphy_struct *mpsrc, int srcfpn,
 int init_mm(struct mm_struct *mm, struct pcb_t *caller)
 {
   struct vm_area_struct *vma0 = malloc(sizeof(struct vm_area_struct));
-
+  if(vma0 == NULL){
+    return -1; // Trả về lỗi nếu không thể cấp phát bộ nhớ cho vùng ảo.
+  }
   mm->pgd = malloc(PAGING_MAX_PGN * sizeof(uint32_t));
-
+  if (mm->pgd == NULL)
+   {  
+    free(vma0); // Giải phóng bộ nhớ đã cấp phát cho vùng ảo.
+     return -1; // Trả về lỗi nếu không thể cấp phát bộ nhớ cho bảng trang.
+  }
   /* By default the owner comes with at least one vma */
   vma0->vm_id = 0;
   vma0->vm_start = 0;
@@ -227,14 +267,13 @@ int init_mm(struct mm_struct *mm, struct pcb_t *caller)
   enlist_vm_rg_node(&vma0->vm_freerg_list, first_rg);
 
   /* TODO update VMA0 next */
-  // vma0->next = ...
+  vma0->vm_next = NULL;  // Chưa có vùng bộ nhớ ảo tiếp theo
 
   /* Point vma owner backward */
   vma0->vm_mm = mm; 
 
   /* TODO: update mmap */
-  //mm->mmap = ...
-
+  mm->mmap = vma0;  // Liên kết vùng bộ nhớ ảo đầu tiên với bộ quản lý bộ nhớ
   return 0;
 }
 

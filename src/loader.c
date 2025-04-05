@@ -74,7 +74,7 @@ struct pcb_t * load(const char * path) {
 		case FREE:
 			fscanf(file, "%u\n", &proc->code->text[i].arg_0);
 			break;
-		case READ:
+		case READ: // đù chưa làm nè
 		case WRITE:
 			fscanf(
 				file,

@@ -1,14 +1,15 @@
 
 #include "queue.h"
 #include "sched.h"
-#include <pthread.h>
 
-#include <stdlib.h>
-#include <stdio.h>
 static struct queue_t ready_queue;
 static struct queue_t run_queue;
-static pthread_mutex_t queue_lock;
 
+#include <pthread.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+static pthread_mutex_t queue_lock;
 static struct queue_t running_list;
 #ifdef MLQ_SCHED
 static struct queue_t mlq_ready_queue[MAX_PRIO];
@@ -24,6 +25,12 @@ int queue_empty(void) {
 #endif
 	return (empty(&ready_queue) && empty(&run_queue));
 }
+
+//Tham khao
+int MarkedPrior = 0 ;
+int flag = 1;
+int count = 0;
+
 
 void init_scheduler(void) {
 #ifdef MLQ_SCHED
@@ -52,15 +59,44 @@ struct pcb_t * get_mlq_proc(void) {
 	//  * Remember to use lock to protect the queue.
 	//  * */
 	pthread_mutex_lock(&queue_lock);
-	for(int i = 0; i<MAX_PRIO;i++){
-		if(!empty(&mlq_ready_queue[i])){
-			proc = dequeue(&mlq_ready_queue[i]);
-			break;
+	label: 
+	if(flag){
+		for(; MarkedPrior < MAX_PRIO; MarkedPrior++){
+			if(mlq_ready_queue[MarkedPrior].size != 0 && slot[MarkedPrior] < MAX_PRIO - MarkedPrior){
+				proc = dequeue(&mlq_ready_queue[MarkedPrior]);
+				slot[MarkedPrior]++;
+				flag = 0;
+				count = 0;
+				pthread_mutex_unlock(&queue_lock);
+				return proc;
+			}
+			count++;
+		}
+		for(int j = 0; j < MAX_PRIO; j++){
+			slot[j] = 0;
+		}
+		MarkedPrior = 0;
+		flag = 1;
+		if(count == MAX_PRIO){
+			pthread_mutex_unlock(&queue_lock);
+			return proc;
+		}else{
+			count = 0;
+		}
+		goto label;
+	}else{
+		if(slot[MarkedPrior] < MAX_PRIO - MarkedPrior && mlq_ready_queue[MarkedPrior].size != 0 ){
+			proc = dequeue(&mlq_ready_queue[MarkedPrior]);
+			slot[MarkedPrior]++;
+			pthread_mutex_unlock(&queue_lock);
+			return proc;
+		}else{
+			flag = 1;
+			goto label;
 		}
 	}
 	pthread_mutex_unlock(&queue_lock);
 	return proc;	
-	
 }
 
 void put_mlq_proc(struct pcb_t * proc) {
